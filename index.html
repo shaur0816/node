@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>3C 產品篩選器</title>
+  <style>
+    body{
+      font-family: "Noto Sans TC", sans-serif;
+      background:#f2f0fb;
+      margin:0;padding:30px;
+    }
+    .container{max-width:900px;margin:0 auto;background:#fff;padding:28px;border-radius:14px;box-shadow:0 6px 18px rgba(70,60,120,0.08);}
+    .form-row{display:flex;gap:18px}
+    .input-box{flex:1;display:flex;flex-direction:column}
+    label{font-size:14px;margin-bottom:6px}
+    input[type="number"]{padding:12px;border-radius:10px;border:1px solid #d6d6d8;font-size:16px}
+    .btn{margin-top:22px;padding:14px;border-radius:12px;border:0;background:linear-gradient(90deg,#5a62ec,#9b59b6);color:#fff;font-size:18px;cursor:pointer;width:100%}
+    .result-title{margin-top:28px;display:flex;align-items:center;justify-content:space-between}
+    .badge{background:#5a62ec;color:#fff;padding:6px 12px;border-radius:999px;font-size:14px}
+    .result-list{margin-top:18px}
+    .card{background:#fff;border:1px solid #e6e6ea;border-radius:12px;padding:20px;margin-bottom:16px;box-shadow:0 2px 0 rgba(0,0,0,0.02)}
+    .name{font-size:20px;font-weight:700}
+    .price{color:#5064f1;margin-top:10px;font-weight:700}
+    .empty{padding:30px;text-align:center;color:#666;border:1px dashed #e0e0e8;border-radius:12px}
+    .hint{color:#c0392b;margin-top:10px;font-size:14px}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔎 3C 產品篩選器</h1>
+    <p style="color:#666;margin-top:4px">設定價格範圍，找出符合預算的商品</p>
+
+    <div class="form-row" style="margin-top:18px">
+      <div class="input-box">
+        <label>最低價格（元）</label>
+        <input id="minPrice" type="number" value="200" min="0">
+      </div>
+      <div class="input-box">
+        <label>最高價格（元）</label>
+        <input id="maxPrice" type="number" value="500" min="0">
+      </div>
+    </div>
+
+    <button id="searchBtn" class="btn">🔍 搜尋產品</button>
+    <div class="result-title">
+      <div style="font-size:18px;font-weight:700;margin-top:6px">搜尋結果</div>
+      <div id="resultBadge" class="badge">0 件商品</div>
+    </div>
+
+    <div id="resultArea" class="result-list"></div>
+    <div id="errorHint" class="hint" style="display:none"></div>
+  </div>
+
+<script>
+  // --- 本地 mock data（真實 API 不可用時會 fallback） ---
+  const MOCK_API_DATA = {
+    "min": 5000,
+    "max": 20000,
+    "totalProducts": 6,
+    "matchedCount": 4,
+    "matchedProducts": [
+      { "id": 1, "name": "手機", "price": 12900 },
+      { "id": 3, "name": "平板", "price": 15900 },
+      { "id": 5, "name": "螢幕", "price": 6990 },
+      { "id": 6, "name": "Dell大螢幕", "price": 12990 }
+    ]
+  };
+
+  const searchBtn = document.getElementById('searchBtn');
+  const resultArea = document.getElementById('resultArea');
+  const resultBadge = document.getElementById('resultBadge');
+  const errorHint = document.getElementById('errorHint');
+
+  searchBtn.addEventListener('click', async () => {
+    errorHint.style.display = 'none';
+    const minVal = Number(document.getElementById('minPrice').value);
+    const maxVal = Number(document.getElementById('maxPrice').value);
+
+    // 驗證
+    if (Number.isNaN(minVal) || Number.isNaN(maxVal)) {
+      showError('請輸入有效的數字範圍。');
+      return;
+    }
+    if (minVal > maxVal) {
+      showError('最低價格不可大於最高價格。');
+      return;
+    }
+
+    // 嘗試呼叫真實 API（若有）
+    const apiUrl = `products?min=${encodeURIComponent(minVal)}&max=${encodeURIComponent(maxVal)}`;
+    let data = null;
+
+    try {
+      // 如果你有後端 server，這裡會實際呼叫它
+      const resp = await fetch(apiUrl, { method: 'GET' });
+      if (!resp.ok) throw new Error('fetch failed');
+      data = await resp.json();
+      // 若後端回傳 matchedProducts，這段會用後端的篩選結果
+    } catch (err) {
+      // fetch 失敗或沒有後端時，使用本地 mock，並以前端輸入的範圍做篩選
+      data = filterMockByRange(MOCK_API_DATA, minVal, maxVal);
+    }
+
+    renderResults(data, minVal, maxVal);
+  });
+
+  function showError(text){
+    errorHint.innerText = text;
+    errorHint.style.display = 'block';
+  }
+
+  // 當後端不可用時，用本地資料再以前端輸入做過濾
+  function filterMockByRange(apiMock, min, max){
+    const filtered = apiMock.matchedProducts.filter(p => (p.price >= min && p.price <= max));
+    return {
+      min,
+      max,
+      totalProducts: apiMock.totalProducts,
+      matchedCount: filtered.length,
+      matchedProducts: filtered
+    };
+  }
+
+  function renderResults(data, min, max){
+    // data 應包含 matchedCount, matchedProducts
+    const count = (data && typeof data.matchedCount === 'number') ? data.matchedCount : 0;
+    resultBadge.innerText = count + ' 件商品';
+
+    resultArea.innerHTML = '';
+    if (!data || !Array.isArray(data.matchedProducts) || data.matchedProducts.length === 0) {
+      resultArea.innerHTML = '<div class="empty">沒有符合條件的商品（範圍：NT$ ' + min.toLocaleString() + ' – NT$ ' + max.toLocaleString() + '）</div>';
+      return;
+    }
+
+    // 顯示每一項
+    data.matchedProducts.forEach(p => {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <div class="name">${escapeHtml(p.name)}</div>
+        <div class="price">NT$ ${Number(p.price).toLocaleString()}</div>
+      `;
+      resultArea.appendChild(card);
+    });
+  }
+
+  // 小工具：避免 XSS（雖然目前用的都是靜態）
+  function escapeHtml(str){
+    return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+  }
+
+  // 預設先跑一次（可刪）
+  // searchBtn.click();
+</script>
+</body>
+</html>
